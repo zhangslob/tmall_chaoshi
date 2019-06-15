@@ -1,7 +1,3 @@
----
-typora-copy-images-to: ../tmall_chaoshi
----
-
 # tmall_chaoshi
 
 ## 爬虫设计
@@ -29,6 +25,4 @@ typora-copy-images-to: ../tmall_chaoshi
 
 ## 分布式设计
 
-
-
-![img](/Users/zhangslob/work/tmall_chaoshi/img.png)
+![](img.img)
