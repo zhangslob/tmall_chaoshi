@@ -18,5 +18,6 @@ class MongoDBPipeline(object):
         try:
             self.c.insert_one(dict(item))
         except pymongo.errors.DuplicateKeyError:
-            spider.logger.debug('DuplicateKeyError')
+            # spider.logger.debug('DuplicateKeyError')
+            pass
         return None

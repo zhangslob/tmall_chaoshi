@@ -5,8 +5,9 @@ import scrapy
 from scrapy import signals
 from random import randint
 
+from ..util.taobao_h5 import category_list
 from ..items import TmallItem
-from .base_crawler import Spider
+from ..util.base_crawler import Spider
 
 
 def random_user_id():
@@ -15,22 +16,21 @@ def random_user_id():
 
 class TmallSpiderSpider(Spider):
     name = 'tmall_spider'
-    allowed_domains = ['tmall.com']
+    # allowed_domains = ['tmall.com']
 
-    list_url = 'https://list.tmall.com/search_product.htm?cat=50502048&&user_id=725677994&s={}'
+    list_url = 'https://list.tmall.com/search_product.htm?cat=50502048&user_id' \
+               '=725677994&s={}&spm=2014.123456789.1.2'
     detail_url = 'https://detail.m.tmall.com/item.htm?id={}'
     area_code = 'https://chaoshi.tmall.com/site/getSiteList.htm'
 
     custom_settings = {
         'ROBOTSTXT_OBEY': False,
-        # 'DOWNLOAD_DELAY': 1,
+        'DOWNLOAD_DELAY': 1,
         'LOG_LEVEL': "DEBUG",
         'ITEM_PIPELINES': {
             'tmall.pipelines.MongoDBPipeline': 300,
         },
-        'DOWNLOADER_MIDDLEWARES': {
-            "tmall.middlewares.ProxyMiddleware": 200
-        },
+
         'DEFAULT_REQUEST_HEADERS': {
             'authority': "list.tmall.com",
             'upgrade-insecure-requests': "1",
@@ -103,49 +103,21 @@ class TmallSpiderSpider(Spider):
                 {i['province']['code'][:2]: i['province']['text']}
             )
 
-        url = self.list_url.replace('&s={}', '')
-        yield scrapy.Request(url, meta={'area': province_data}, callback=self.parse_list)
-
-    def parse_list(self, response):
-        """
-        翻页并进入详情页
-        每页有40条数据
-        :param response:
-        :return:
-        """
-        if 'login' in response.url:
-            times_ = response.meta.get('cus_retry_times', 0) + 1
-
-            if times_ < 10:
-                r = response.request.copy()
-                r = r.replace(url=response.request.meta['redirect_urls'][0])
-                r.dont_filter = True
-                r.priority = 10
-                r.meta['cus_retry_times'] = times_
-                yield r
-            else:
-                self.logger.error('retry too many {}'.format(response.request.meta['redirect_urls'][0]))
-            return
-
-        area = response.meta['area']
-
-        # data-id="587075048581"
-        item_list = re.findall('data-itemid="(\d+)"', response.text)
-
+        # 保存一份完成省市数据，供后面数据清洗
+        yield TmallItem({
+            'item_id': 1,
+            'title': 'province_data',
+            'province_list': province_data
+        })
+        item_list = category_list()
+        self.logger.info('get item len {}'.format(len(item_list)))
         for item in item_list:
             detail_url = self.detail_url.format(item)
             yield scrapy.Request(detail_url, callback=self.parse_detail,
-                                 headers=self.detail_headers, meta={'area': area})
+                                 headers=self.detail_headers, meta={'area': province_data})
 
-        # 在第一页时处理翻页
-        if '&s=' not in response.url:
-            # 总页数，40 offset
-            total_page = response.xpath('//li[@class="quick-page-changer"]/span/text()').extract_first().split('/')[1]
-            for i in range(2, int(total_page) + 1):
-                url = self.list_url.format((i - 1) * 40)
-                yield scrapy.Request(url, callback=self.parse_list, meta={'area': area})
-
-    def parse_detail(self, response):
+    @staticmethod
+    def parse_detail(response):
         """
         抓取html中的soldAreas
         https://detail.m.tmall.com/item.htm?id=12425590998
